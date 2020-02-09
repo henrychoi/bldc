@@ -24,11 +24,25 @@
 #include "conf_general.h"
 #include "stm32f4xx_conf.h"
 #include "utils.h"
+#include "commands.h"
+#include "terminal.h"
+#include <stdio.h>
 
 // Settings
 #define TIM_CLOCK			1000000 // Hz
 
 #if SERVO_OUT_ENABLE
+
+static void terminal_servo_write(int argc, const char **argv) {
+	if (argc == 2) {
+		int val = -1;
+		sscanf(argv[1], "%d", &val);
+
+		servo_simple_set_output(0.001f * val);
+	} else {
+		commands_printf("This command requires two arguments.\n");
+	}
+}
 
 void servo_simple_init(void) {
 	TIM_TimeBaseInitTypeDef  TIM_TimeBaseStructure;
@@ -64,6 +78,12 @@ void servo_simple_init(void) {
 	servo_simple_set_output(0.5);
 
 	TIM_Cmd(HW_ICU_TIMER, ENABLE);
+	
+	terminal_register_command_callback(
+		"servo",
+		"Set servo duty",
+		"[0,1000]",
+		terminal_servo_write);
 }
 
 void servo_simple_set_output(float out) {
