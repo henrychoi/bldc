@@ -175,7 +175,7 @@
  * Enable blackmagic probe output on SWD port
  */
 #ifndef HAS_BLACKMAGIC
-#define HAS_BLACKMAGIC				1
+#define HAS_BLACKMAGIC				0
 #endif
 
 /*
@@ -214,7 +214,7 @@
  * Servo output driver
  */
 #ifndef SERVO_OUT_ENABLE
-#define SERVO_OUT_ENABLE			0		// Enable servo output
+#define SERVO_OUT_ENABLE			1		// Enable servo output
 #endif
 #define SERVO_OUT_PULSE_MIN_US		1000	// Minimum pulse length in microseconds
 #define SERVO_OUT_PULSE_MAX_US		2000	// Maximum pulse length in microseconds
@@ -289,7 +289,5 @@ int conf_general_autodetect_apply_sensors_foc(float current,
 		bool store_mcconf_on_success, bool send_mcconf_on_success);
 int conf_general_detect_apply_all_foc(float max_power_loss,
 		bool store_mcconf_on_success, bool send_mcconf_on_success);
-int conf_general_detect_apply_all_foc_can(bool detect_can, float max_power_loss,
-		float min_current_in, float max_current_in, float openloop_rpm, float sl_erpm);
 
 #endif /* CONF_GENERAL_H_ */

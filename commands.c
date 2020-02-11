@@ -37,7 +37,6 @@
 #include "utils.h"
 #include "packet.h"
 #include "encoder.h"
-#include "nrf_driver.h"
 #include "gpdrive.h"
 #include "confgenerator.h"
 #include "imu.h"
@@ -199,10 +198,11 @@ void commands_process_packet(unsigned char *data, unsigned int len,
 		break;
 
 	case COMM_ERASE_NEW_APP_ALL_CAN:
+#if !SERVO_OUT_ENABLE
 		if (nrf_driver_ext_nrf_running()) {
 			nrf_driver_pause(6000);
 		}
-
+#endif
 		data[-1] = COMM_ERASE_NEW_APP;
 		comm_can_send_buffer(255, data - 1, len + 1, 2);
 		chThdSleepMilliseconds(1500);
@@ -210,10 +210,11 @@ void commands_process_packet(unsigned char *data, unsigned int len,
 		/* no break */
 	case COMM_ERASE_NEW_APP: {
 		int32_t ind = 0;
-
+#if !SERVO_OUT_ENABLE
 		if (nrf_driver_ext_nrf_running()) {
 			nrf_driver_pause(6000);
 		}
+#endif
 		uint16_t flash_res = flash_helper_erase_new_app(buffer_get_uint32(data, &ind));
 
 		ind = 0;
@@ -234,11 +235,11 @@ void commands_process_packet(unsigned char *data, unsigned int len,
 			chMtxUnlock(&send_buffer_mutex);
 			len = decompressed_len + 4;
 		}
-
+#if !SERVO_OUT_ENABLE
 		if (nrf_driver_ext_nrf_running()) {
 			nrf_driver_pause(2000);
 		}
-
+#endif
 		data[-1] = COMM_WRITE_NEW_APP_DATA;
 
 		comm_can_send_buffer(255, data - 1, len + 1, 2);
@@ -258,10 +259,11 @@ void commands_process_packet(unsigned char *data, unsigned int len,
 
 		int32_t ind = 0;
 		uint32_t new_app_offset = buffer_get_uint32(data, &ind);
-
+#if !SERVO_OUT_ENABLE
 		if (nrf_driver_ext_nrf_running()) {
 			nrf_driver_pause(2000);
 		}
+#endif
 		uint16_t flash_res = flash_helper_write_new_app_data(new_app_offset, data + ind, len - ind);
 
 		ind = 0;
@@ -506,81 +508,16 @@ void commands_process_packet(unsigned char *data, unsigned int len,
 		timeout_reset();
 		break;
 
-	case COMM_GET_DECODED_PPM: {
-		int32_t ind = 0;
-		uint8_t send_buffer[50];
-		send_buffer[ind++] = COMM_GET_DECODED_PPM;
-		buffer_append_int32(send_buffer, (int32_t)(app_ppm_get_decoded_level() * 1000000.0), &ind);
-		buffer_append_int32(send_buffer, (int32_t)(servodec_get_last_pulse_len(0) * 1000000.0), &ind);
-		reply_func(send_buffer, ind);
-	} break;
-
-	case COMM_GET_DECODED_ADC: {
-		int32_t ind = 0;
-		uint8_t send_buffer[50];
-		send_buffer[ind++] = COMM_GET_DECODED_ADC;
-		buffer_append_int32(send_buffer, (int32_t)(app_adc_get_decoded_level() * 1000000.0), &ind);
-		buffer_append_int32(send_buffer, (int32_t)(app_adc_get_voltage() * 1000000.0), &ind);
-		buffer_append_int32(send_buffer, (int32_t)(app_adc_get_decoded_level2() * 1000000.0), &ind);
-		buffer_append_int32(send_buffer, (int32_t)(app_adc_get_voltage2() * 1000000.0), &ind);
-		reply_func(send_buffer, ind);
-	} break;
-
-	case COMM_GET_DECODED_CHUK: {
-		int32_t ind = 0;
-		uint8_t send_buffer[50];
-		send_buffer[ind++] = COMM_GET_DECODED_CHUK;
-		buffer_append_int32(send_buffer, (int32_t)(app_nunchuk_get_decoded_chuk() * 1000000.0), &ind);
-		reply_func(send_buffer, ind);
-	} break;
-
-	case COMM_GET_DECODED_BALANCE: {
-		int32_t ind = 0;
-		uint8_t send_buffer[50];
-		send_buffer[ind++] = COMM_GET_DECODED_BALANCE;
-		buffer_append_int32(send_buffer, (int32_t)(app_balance_get_pid_output() * 1000000.0), &ind);
-		buffer_append_int32(send_buffer, (int32_t)(app_balance_get_pitch_angle() * 1000000.0), &ind);
-		buffer_append_int32(send_buffer, (int32_t)(app_balance_get_roll_angle() * 1000000.0), &ind);
-		buffer_append_uint32(send_buffer, app_balance_get_diff_time(), &ind);
-		buffer_append_int32(send_buffer, (int32_t)(app_balance_get_motor_current() * 1000000.0), &ind);
-		buffer_append_int32(send_buffer, (int32_t)(app_balance_get_motor_position() * 1000000.0), &ind);
-		buffer_append_uint16(send_buffer, app_balance_get_state(), &ind);
-		buffer_append_uint16(send_buffer, app_balance_get_switch_value(), &ind);
-		reply_func(send_buffer, ind);
-	} break;
-
 	case COMM_FORWARD_CAN:
 		comm_can_send_buffer(data[0], data + 1, len - 1, 0);
 		break;
-
-	case COMM_SET_CHUCK_DATA: {
-		chuck_data chuck_d_tmp;
-
-		int32_t ind = 0;
-		chuck_d_tmp.js_x = data[ind++];
-		chuck_d_tmp.js_y = data[ind++];
-		chuck_d_tmp.bt_c = data[ind++];
-		chuck_d_tmp.bt_z = data[ind++];
-		chuck_d_tmp.acc_x = buffer_get_int16(data, &ind);
-		chuck_d_tmp.acc_y = buffer_get_int16(data, &ind);
-		chuck_d_tmp.acc_z = buffer_get_int16(data, &ind);
-
-		if (len >= (unsigned int)ind + 2) {
-			chuck_d_tmp.rev_has_state = data[ind++];
-			chuck_d_tmp.is_rev = data[ind++];
-		} else {
-			chuck_d_tmp.rev_has_state = false;
-			chuck_d_tmp.is_rev = false;
-		}
-		app_nunchuk_update_output(&chuck_d_tmp);
-	} break;
 
 	case COMM_CUSTOM_APP_DATA:
 		if (appdata_func) {
 			appdata_func(data, len);
 		}
 		break;
-
+#if !SERVO_OUT_ENABLE
 	case COMM_NRF_START_PAIRING: {
 		int32_t ind = 0;
 		nrf_driver_start_pairing(buffer_get_int32(data, &ind));
@@ -591,7 +528,7 @@ void commands_process_packet(unsigned char *data, unsigned int len,
 		send_buffer[ind++] = NRF_PAIR_STARTED;
 		reply_func(send_buffer, ind);
 	} break;
-
+#endif
 	case COMM_GPD_SET_FSW: {
 		timeout_reset();
 		int32_t ind = 0;
@@ -820,7 +757,7 @@ void commands_process_packet(unsigned char *data, unsigned int len,
 			reply_func(send_buffer, ind);
 		}
 	} break;
-
+#if !SERVO_OUT_ENABLE
 	case COMM_EXT_NRF_PRESENT: {
 		if (!conf_general_permanent_nrf_found) {
 			nrf_driver_init_ext_nrf();
@@ -840,7 +777,7 @@ void commands_process_packet(unsigned char *data, unsigned int len,
 	case COMM_EXT_NRF_ESB_RX_DATA: {
 		nrf_driver_process_packet(data, len);
 	} break;
-
+#endif
 	case COMM_APP_DISABLE_OUTPUT: {
 		int32_t ind = 0;
 		bool fwd_can = data[ind++];
@@ -934,10 +871,11 @@ void commands_process_packet(unsigned char *data, unsigned int len,
 	} break;
 
 	case COMM_ERASE_BOOTLOADER_ALL_CAN:
+#if !SERVO_OUT_ENABLE
 		if (nrf_driver_ext_nrf_running()) {
 			nrf_driver_pause(6000);
 		}
-
+#endif
 		data[-1] = COMM_ERASE_BOOTLOADER;
 		comm_can_send_buffer(255, data - 1, len + 1, 2);
 		chThdSleepMilliseconds(1500);
@@ -945,10 +883,11 @@ void commands_process_packet(unsigned char *data, unsigned int len,
 		/* no break */
 	case COMM_ERASE_BOOTLOADER: {
 		int32_t ind = 0;
-
+#if !SERVO_OUT_ENABLE
 		if (nrf_driver_ext_nrf_running()) {
 			nrf_driver_pause(6000);
 		}
+#endif
 		uint16_t flash_res = flash_helper_erase_bootloader();
 
 		ind = 0;
@@ -1382,16 +1321,7 @@ static THD_FUNCTION(blocking_thread, arg) {
 
 		case COMM_DETECT_APPLY_ALL_FOC: {
 			int32_t ind = 0;
-			bool detect_can = data[ind++];
-			float max_power_loss = buffer_get_float32(data, 1e3, &ind);
-			float min_current_in = buffer_get_float32(data, 1e3, &ind);
-			float max_current_in = buffer_get_float32(data, 1e3, &ind);
-			float openloop_rpm = buffer_get_float32(data, 1e3, &ind);
-			float sl_erpm = buffer_get_float32(data, 1e3, &ind);
-
-			int res = conf_general_detect_apply_all_foc_can(detect_can, max_power_loss,
-					min_current_in, max_current_in, openloop_rpm, sl_erpm);
-
+			int res = -50;
 			ind = 0;
 			send_buffer[ind++] = COMM_DETECT_APPLY_ALL_FOC;
 			buffer_append_int16(send_buffer, res, &ind);
@@ -1509,25 +1439,6 @@ static THD_FUNCTION(blocking_thread, arg) {
 			}
 		} break;
 #endif
-
-		case COMM_BM_MEM_READ: {
-			int32_t ind = 0;
-			uint32_t addr = buffer_get_uint32(data, &ind);
-			uint16_t read_len = buffer_get_uint16(data, &ind);
-
-			if (read_len > sizeof(send_buffer) - 3) {
-				read_len = sizeof(send_buffer) - 3;
-			}
-
-			int res = bm_mem_read(addr, send_buffer + 3, read_len);
-
-			ind = 0;
-			send_buffer[ind++] = packet_id;
-			buffer_append_int16(send_buffer, res, &ind);
-			if (send_func_blocking) {
-				send_func_blocking(send_buffer, ind + read_len);
-			}
-		} break;
 
 		default:
 			break;

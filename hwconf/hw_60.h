@@ -172,7 +172,7 @@
 #define HW_ADC_EXT2_GPIO		GPIOA
 #define HW_ADC_EXT2_PIN			6
 
-// UART Peripheral
+// Can talk to UART Peripheral connected to the COM port
 #define HW_UART_DEV				SD3
 #define HW_UART_GPIO_AF			GPIO_AF_USART3
 #define HW_UART_TX_PORT			GPIOB
@@ -201,14 +201,6 @@
 #define HW_ICU_GPIO_AF			GPIO_AF_TIM4
 #define HW_ICU_GPIO				GPIOB
 #define HW_ICU_PIN				6
-
-// I2C Peripheral
-#define HW_I2C_DEV				I2CD2
-#define HW_I2C_GPIO_AF			GPIO_AF_I2C2
-#define HW_I2C_SCL_PORT			GPIOB
-#define HW_I2C_SCL_PIN			10
-#define HW_I2C_SDA_PORT			GPIOB
-#define HW_I2C_SDA_PIN			11
 
 // Hall/encoder pins
 #define HW_HALL_ENC_GPIO1		GPIOC
@@ -239,18 +231,6 @@
 #define NRF_PORT_MISO			GPIOD
 #define NRF_PIN_MISO			2
 #endif
-
-// SPI pins
-#define HW_SPI_DEV				SPID1
-#define HW_SPI_GPIO_AF			GPIO_AF_SPI1
-#define HW_SPI_PORT_NSS			GPIOA
-#define HW_SPI_PIN_NSS			4
-#define HW_SPI_PORT_SCK			GPIOA
-#define HW_SPI_PIN_SCK			5
-#define HW_SPI_PORT_MOSI		GPIOA
-#define HW_SPI_PIN_MOSI			7
-#define HW_SPI_PORT_MISO		GPIOA
-#define HW_SPI_PIN_MISO			6
 
 // SPI for DRV8301
 #ifndef HW60_IS_MK3
