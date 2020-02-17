@@ -22,6 +22,6 @@
 
 // Functions
 void servo_simple_init(void);
-void servo_simple_set_output(float out);
+void servo_simple_set_output(int idx, float out);
 
 #endif /* SERVO_SIMPLE_H_ */
