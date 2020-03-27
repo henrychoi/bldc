@@ -413,9 +413,10 @@ void commands_process_packet(unsigned char *data, unsigned int len,
 	case COMM_SET_SERVO_POS: {
 #if SERVO_OUT_ENABLE
 		int32_t byteOffset = 0;
-		int16_t idx = buffer_get_int16(data, &byteOffset);
-		float duty = buffer_get_float16(data, 1000.0, &byteOffset);
-		servo_simple_set_output(idx, duty);
+		float duty0 = buffer_get_float16(data, 1000.0, &byteOffset)
+			, duty1 = buffer_get_float16(data, 1000.0, &byteOffset);
+		servo_simple_set_output(0, duty0);
+		servo_simple_set_output(1, duty1);
 #endif
 	} break;
 
