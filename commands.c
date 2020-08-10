@@ -336,7 +336,7 @@ void commands_process_packet(unsigned char *data, unsigned int len,
 			send_buffer[ind++] = mc_interface_get_fault();
 		}
 		if (mask & ((uint32_t)1 << 16)) {
-			buffer_append_float32(send_buffer, mc_interface_get_pid_pos_now(), 1e6, &ind);
+			buffer_append_float32(send_buffer, mc_interface_get_pid_pos_now(), 1, &ind);
 		}
 		if (mask & ((uint32_t)1 << 17)) {
 			send_buffer[ind++] = app_get_configuration()->controller_id;
@@ -383,7 +383,8 @@ void commands_process_packet(unsigned char *data, unsigned int len,
 
 	case COMM_SET_POS: {
 		int32_t ind = 0;
-		mc_interface_set_pid_pos((float)buffer_get_int32(data, &ind) / 1000000.0);
+		(void)buffer_get_int32(data, &ind);
+		mc_interface_reset_pos();
 		timeout_reset();
 	} break;
 
@@ -965,7 +966,7 @@ void commands_send_rotor_pos(float rotor_pos) {
 	uint8_t buffer[5];
 	int32_t index = 0;
 	buffer[index++] = COMM_ROTOR_POSITION;
-	buffer_append_int32(buffer, (int32_t)(rotor_pos * 100000.0), &index);
+	buffer_append_int32(buffer, (int32_t)rotor_pos, &index);
 	commands_send_packet(buffer, index);
 }
 

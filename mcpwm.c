@@ -142,7 +142,6 @@ static void stop_pwm_hw(void);
 static void full_brake_ll(void);
 static void full_brake_hw(void);
 static void run_pid_control_speed(void);
-static void run_pid_control_pos(float dt, float pos_now);
 static void set_next_comm_step(int next_step);
 static void update_rpm_tacho(void);
 static void update_sensor_mode(void);
@@ -609,22 +608,9 @@ void mcpwm_set_pid_speed(float rpm) {
 	speed_pid_set_rpm = rpm;
 }
 
-/**
- * Use PID position control. Note that this only works when encoder support
- * is enabled.
- *
- * @param pos
- * The desired position of the motor in degrees.
- */
-void mcpwm_set_pid_pos(float pos) {
-	control_mode = CONTROL_MODE_POS;
-	pos_pid_set_pos = pos;
-
-	if (state != MC_STATE_RUNNING) {
-		set_duty_cycle_hl(conf->l_min_duty);
-	}
+void mcpwm_reset_pos() {
+	pos_pid_set_pos = 0;
 }
-
 /**
  * Use current control and specify a goal current to use. The sign determines
  * the direction of the torque. Absolute values less than
@@ -1241,45 +1227,6 @@ static void run_pid_control_speed(void) {
 
 	set_duty_cycle_hl(output);
 #endif
-}
-
-static void run_pid_control_pos(float dt, float pos_now) {
-	static float i_term = 0;
-	static float prev_error = 0;
-	float p_term;
-	float d_term;
-
-	// PID is off. Return.
-	if (control_mode != CONTROL_MODE_POS) {
-		i_term = 0;
-		prev_error = 0;
-		return;
-	}
-
-	// Compute error
-	float error = utils_angle_difference(pos_now, pos_pid_set_pos);
-
-	// Compute parameters
-	p_term = error * conf->p_pid_kp;
-	i_term += error * (conf->p_pid_ki * dt);
-	d_term = (error - prev_error) * (conf->p_pid_kd / dt);
-
-	// Filter D
-	static float d_filter = 0.0;
-	UTILS_LP_FAST(d_filter, d_term, conf->p_pid_kd_filter);
-	d_term = d_filter;
-
-	// I-term wind-up protection
-	utils_truncate_number(&i_term, -1.0, 1.0);
-
-	// Store previous error
-	prev_error = error;
-
-	// Calculate output
-	float output = p_term + i_term + d_term;
-	utils_truncate_number(&output, -1.0, 1.0);
-
-	current_set = output * conf->lo_current_max;
 }
 
 static THD_FUNCTION(rpm_thread, arg) {
@@ -1974,10 +1921,9 @@ void mcpwm_adc_int_handler(void *p, uint32_t flags) {
 
 #if BLDC_SPEED_CONTROL_CURRENT
 		if (control_mode == CONTROL_MODE_CURRENT ||
-				control_mode == CONTROL_MODE_POS ||
 				control_mode == CONTROL_MODE_SPEED) {
 #else
-		if (control_mode == CONTROL_MODE_CURRENT || control_mode == CONTROL_MODE_POS) {
+		if (control_mode == CONTROL_MODE_CURRENT) {
 #endif
 			// Compute error
 			const float error = current_set - (direction ? current_nofilter : -current_nofilter);
@@ -2109,7 +2055,6 @@ void mcpwm_adc_int_handler(void *p, uint32_t flags) {
 
 	if (encoder_is_configured()) {
 		float pos = encoder_read_deg();
-		run_pid_control_pos(1.0 / switching_frequency_now, pos);
 		pll_run(-pos * M_PI / 180.0, 1.0 / switching_frequency_now, &m_pll_phase, &m_pll_speed);
 	}
 

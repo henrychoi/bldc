@@ -96,7 +96,6 @@ static volatile float m_openloop_speed;
 static volatile float m_openloop_phase;
 static volatile bool m_dccal_done;
 static volatile bool m_output_on;
-static volatile float m_pos_pid_set;
 static volatile float m_speed_pid_set_rpm;
 static volatile float m_phase_now_observer;
 static volatile float m_phase_now_observer_override;
@@ -111,7 +110,7 @@ static volatile mc_sample_t m_samples;
 static volatile int m_tachometer;
 static volatile int m_tachometer_abs;
 static volatile float m_last_adc_isr_duration;
-static volatile float m_pos_pid_now;
+extern volatile float m_pos_pid_now = 0;
 static volatile bool m_init_done = false;
 static volatile float m_gamma_now;
 static volatile bool m_using_encoder;
@@ -130,7 +129,6 @@ static void pll_run(float phase, float dt, volatile float *phase_var,
 static void control_current(volatile motor_state_t *state_m, float dt);
 static void svm(float alpha, float beta, uint32_t PWMHalfPeriod,
 		uint32_t* tAout, uint32_t* tBout, uint32_t* tCout, uint32_t *svm_sector);
-static void run_pid_control_pos(float angle_now, float angle_set, float dt);
 static void run_pid_control_speed(float dt);
 static void stop_pwm_hw(void);
 static void start_pwm_hw(void);
@@ -220,7 +218,6 @@ void mcpwm_foc_init(volatile mc_configuration *configuration) {
 	m_openloop_speed = 0.0;
 	m_openloop_phase = 0.0;
 	m_output_on = false;
-	m_pos_pid_set = 0.0;
 	m_speed_pid_set_rpm = 0.0;
 	m_phase_now_observer = 0.0;
 	m_phase_now_observer_override = 0.0;
@@ -559,13 +556,8 @@ void mcpwm_foc_set_pid_speed(float rpm) {
  * @param pos
  * The desired position of the motor in degrees.
  */
-void mcpwm_foc_set_pid_pos(float pos) {
-	m_control_mode = CONTROL_MODE_POS;
-	m_pos_pid_set = pos;
-
-	if (m_state != MC_STATE_RUNNING) {
-		m_state = MC_STATE_RUNNING;
-	}
+void mcpwm_foc_reset_pos() {
+	m_pos_pid_now = 0;
 }
 
 /**
@@ -763,7 +755,7 @@ float mcpwm_foc_get_duty_cycle_now(void) {
 }
 
 float mcpwm_foc_get_pid_pos_set(void) {
-	return m_pos_pid_set;
+	return m_pos_pid_now;
 }
 
 float mcpwm_foc_get_pid_pos_now(void) {
@@ -1750,6 +1742,7 @@ void mcpwm_foc_adc_int_handler(void *p, uint32_t flags) {
 #endif
 
 	// Use the best current samples depending on the modulation state.
+	// "best" means whatever was outputting more current (less noise)
 #ifdef HW_HAS_3_SHUNTS
 	if (m_conf->foc_sample_high_current) {
 		// High current sampling mode. Choose the lower currents to derive the highest one
@@ -1857,7 +1850,7 @@ void mcpwm_foc_adc_int_handler(void *p, uint32_t flags) {
 	if (m_conf->foc_sample_v0_v7) {
 		dt = 1.0 / m_conf->foc_f_sw;
 	} else {
-		dt = 1.0 / (m_conf->foc_f_sw / 2.0);
+		dt = 1.0 / (m_conf->foc_f_sw / 2.0); // Q: is the effective F_sw only 1/2?
 	}
 #else
 	float dt = 1.0 / (m_conf->foc_f_sw / 2.0);
@@ -1891,6 +1884,17 @@ void mcpwm_foc_adc_int_handler(void *p, uint32_t flags) {
 	static float phase_before = 0.0;
 	const float phase_diff = utils_angle_difference_rad(m_motor_state.phase, phase_before);
 	phase_before = m_motor_state.phase;
+#if 1
+	//m_pos_pid_now = m_phase_now_observer * m_conf->p_pid_ang_div;
+	//m_pos_pid_now = phase_diff * m_conf->p_pid_ang_div;
+	m_pos_pid_now += phase_diff / m_conf->p_pid_ang_div;
+	//m_pos_pid_now = pid_pos;
+	//m_pos_pid_now = m_control_mode;
+#else
+	// static int32_t sCount = 0;
+	// m_pos_pid_now = (++sCount / 100000) & 1;
+	m_pos_pid_now = m_pos_pid_set;
+#endif
 
 	if (m_state == MC_STATE_RUNNING) {
 		// Clarke transform assuming balanced currents
@@ -1988,6 +1992,7 @@ void mcpwm_foc_adc_int_handler(void *p, uint32_t flags) {
 			observer_update(m_motor_state.v_alpha, m_motor_state.v_beta,
 					m_motor_state.i_alpha, m_motor_state.i_beta, dt,
 					&m_observer_x1, &m_observer_x2, &m_phase_now_observer);
+			// estimate the phase NOW, which is dT/2 elapsed from the last sample
 			m_phase_now_observer += m_pll_speed * dt * 0.5;
 			utils_norm_angle_rad((float*)&m_phase_now_observer);
 		}
@@ -2194,30 +2199,6 @@ void mcpwm_foc_adc_int_handler(void *p, uint32_t flags) {
 	m_tachometer += diff;
 	m_tachometer_abs += abs(diff);
 
-	// Track position control angle
-	// TODO: Have another look at this.
-	float angle_now = 0.0;
-	if (encoder_is_configured()) {
-		angle_now = enc_ang;
-	} else {
-		angle_now = m_motor_state.phase * (180.0 / M_PI);
-	}
-
-	if (m_conf->p_pid_ang_div > 0.98 && m_conf->p_pid_ang_div < 1.02) {
-		m_pos_pid_now = angle_now;
-	} else {
-		static float angle_last = 0.0;
-		float diff_f = utils_angle_difference(angle_now, angle_last);
-		angle_last = angle_now;
-		m_pos_pid_now += diff_f / m_conf->p_pid_ang_div;
-		utils_norm_angle((float*)&m_pos_pid_now);
-	}
-
-	// Run position control
-	if (m_state == MC_STATE_RUNNING) {
-		run_pid_control_pos(m_pos_pid_now, m_pos_pid_set, dt);
-	}
-
 #ifdef AD2S1205_SAMPLE_GPIO
 	// Release sample in the AD2S1205 resolver IC.
 	palSetPad(AD2S1205_SAMPLE_GPIO, AD2S1205_SAMPLE_PIN);
@@ -2262,7 +2243,7 @@ static THD_FUNCTION(timer_thread, arg) {
 
 		// Open loop encoder angle for when the index is not found
 		m_phase_now_encoder_no_index += add_min_speed;
-		utils_norm_angle_rad((float*)&m_phase_now_encoder_no_index);
+		utils_norm_angle_rad((float*)&m_phase_now_encoder_no_index); // bound to +/-M_PI
 
 		// Output a minimum speed from the observer
 		if (fabsf(m_pll_speed) < min_rads) {
@@ -2510,7 +2491,8 @@ static void control_current(volatile motor_state_t *state_m, float dt) {
 	float dec_vd = 0.0;
 	float dec_vq = 0.0;
 
-	if (m_control_mode < CONTROL_MODE_HANDBRAKE && m_conf->foc_cc_decoupling != FOC_CC_DECOUPLING_DISABLED) {
+	if (m_control_mode < CONTROL_MODE_HANDBRAKE // control DUTY, SPEED, CURRENT, POS
+		&& m_conf->foc_cc_decoupling != FOC_CC_DECOUPLING_DISABLED) {
 		switch (m_conf->foc_cc_decoupling) {
 			case FOC_CC_DECOUPLING_CROSS:
 				dec_vd = state_m->iq * state_m->speed_rad_s * m_conf->foc_motor_l;
@@ -2569,7 +2551,7 @@ static void control_current(volatile motor_state_t *state_m, float dt) {
 	float mod_alpha = c * state_m->mod_d - s * state_m->mod_q;
 	float mod_beta  = c * state_m->mod_q + s * state_m->mod_d;
 
-	// Deadtime compensation
+	// Deadtime compensation?
 	const float i_alpha_filter = c * state_m->id_target - s * state_m->iq_target;
 	const float i_beta_filter = c * state_m->iq_target + s * state_m->id_target;
 	const float ia_filter = i_alpha_filter;
@@ -2622,7 +2604,7 @@ static void svm(float alpha, float beta, uint32_t PWMHalfPeriod,
 		}
 	} else {
 		if (alpha >= 0.0f) {
-			//quadrant IV5
+			//quadrant IV
 			if (-ONE_BY_SQRT3 * beta > alpha) {
 				sector = 5;
 			} else {
@@ -2732,73 +2714,6 @@ static void svm(float alpha, float beta, uint32_t PWMHalfPeriod,
 	*tBout = tB;
 	*tCout = tC;
 	*svm_sector = sector;
-}
-
-static void run_pid_control_pos(float angle_now, float angle_set, float dt) {
-	static float i_term = 0;
-	static float prev_error = 0;
-	float p_term;
-	float d_term;
-
-	// PID is off. Return.
-	if (m_control_mode != CONTROL_MODE_POS) {
-		i_term = 0;
-		prev_error = 0;
-		return;
-	}
-
-	// Compute parameters
-	float error = utils_angle_difference(angle_set, angle_now);
-
-	if (encoder_is_configured()) {
-		if (m_conf->foc_encoder_inverted) {
-			error = -error;
-		}
-	}
-
-	p_term = error * m_conf->p_pid_kp;
-	i_term += error * (m_conf->p_pid_ki * dt);
-
-	// Average DT for the D term when the error does not change. This likely
-	// happens at low speed when the position resolution is low and several
-	// control iterations run without position updates.
-	// TODO: Are there problems with this approach?
-	static float dt_int = 0.0;
-	dt_int += dt;
-	if (error == prev_error) {
-		d_term = 0.0;
-	} else {
-		d_term = (error - prev_error) * (m_conf->p_pid_kd / dt_int);
-		dt_int = 0.0;
-	}
-
-	// Filter D
-	static float d_filter = 0.0;
-	UTILS_LP_FAST(d_filter, d_term, m_conf->p_pid_kd_filter);
-	d_term = d_filter;
-
-
-	// I-term wind-up protection
-	utils_truncate_number_abs(&p_term, 1.0);
-	utils_truncate_number_abs(&i_term, 1.0 - fabsf(p_term));
-
-	// Store previous error
-	prev_error = error;
-
-	// Calculate output
-	float output = p_term + i_term + d_term;
-	utils_truncate_number(&output, -1.0, 1.0);
-
-	if (encoder_is_configured()) {
-		if (encoder_index_found()) {
-			m_iq_set = output * m_conf->lo_current_max;
-		} else {
-			// Rotate the motor with 40 % power until the encoder index is found.
-			m_iq_set = 0.4 * m_conf->lo_current_max;
-		}
-	} else {
-		m_iq_set = output * m_conf->lo_current_max;
-	}
 }
 
 static void run_pid_control_speed(float dt) {

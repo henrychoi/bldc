@@ -647,6 +647,16 @@ void terminal_process_string(char *str) {
 		}
 	} else if (strcmp(argv[0], "uptime") == 0) {
 		commands_printf("Uptime: %.2f s\n", (double)chVTGetSystemTimeX() / (double)CH_CFG_ST_FREQUENCY);
+	} else if (strcmp(argv[0], "pid_speed") == 0) {
+		if (argc == 2) {
+			float val = -1.0;
+			sscanf(argv[1], "%f", &val);
+			mc_interface_set_pid_speed(val);
+		} else {
+			commands_printf("Usage: pid_speed <RPM>.\n");
+		}
+	} else if (strcmp(argv[0], "pid_pos") == 0) {
+		mc_interface_reset_pos();
 	}
 
 	// The help command
@@ -757,6 +767,9 @@ void terminal_process_string(char *str) {
 
 		commands_printf("encoder");
 		commands_printf("  Prints the status of the AS5047, AD2S1205, or TS5700N8501 encoder.");
+
+		commands_printf("pid_pos");
+		commands_printf("  set target position");
 
 		commands_printf("uptime");
 		commands_printf("  Prints how many seconds have passed since boot.");
