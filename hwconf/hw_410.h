@@ -119,18 +119,10 @@
 #define HW_ICU_TIMER			TIM3
 #define HW_ICU_TIM_CLK_EN()		RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM3, ENABLE)
 #define HW_ICU_DEV				ICUD3
-#define HW_ICU_CHANNEL			ICU_CHANNEL_2
+#define HW_ICU_CHANNEL			ICU_CHANNEL_1
 #define HW_ICU_GPIO_AF			GPIO_AF_TIM3
-#define HW_ICU_GPIO				GPIOB
-#define HW_ICU_PIN				5
-
-// I2C Peripheral
-#define HW_I2C_DEV				I2CD2
-#define HW_I2C_GPIO_AF			GPIO_AF_I2C2
-#define HW_I2C_SCL_PORT			GPIOB
-#define HW_I2C_SCL_PIN			10
-#define HW_I2C_SDA_PORT			GPIOB
-#define HW_I2C_SDA_PIN			11
+#define HW_ICU_GPIO				GPIOA
+#define HW_ICU_PIN				6
 
 // Hall/encoder pins
 #define HW_HALL_ENC_GPIO1		GPIOB
@@ -149,18 +141,6 @@
 #define HW_ENC_EXTI_ISR_VEC		EXTI15_10_IRQHandler
 #define HW_ENC_TIM_ISR_CH		TIM4_IRQn
 #define HW_ENC_TIM_ISR_VEC		TIM4_IRQHandler
-
-// SPI pins
-#define HW_SPI_DEV				SPID1
-#define HW_SPI_GPIO_AF			GPIO_AF_SPI1
-#define HW_SPI_PORT_NSS			GPIOA
-#define HW_SPI_PIN_NSS			4
-#define HW_SPI_PORT_SCK			GPIOA
-#define HW_SPI_PIN_SCK			5
-#define HW_SPI_PORT_MOSI		GPIOA
-#define HW_SPI_PIN_MOSI			7
-#define HW_SPI_PORT_MISO		GPIOA
-#define HW_SPI_PIN_MISO			6
 
 // Measurement macros
 #define ADC_V_L1				ADC_Value[ADC_IND_SENS1]

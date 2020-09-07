@@ -32,7 +32,6 @@
 #define TIM_CLOCK			1000000 // Hz
 
 #if SERVO_OUT_ENABLE
-#define N_SERVO 5
 
 static void terminal_servo_write(int argc, const char **argv) {
 	if (argc == 3) {
@@ -50,20 +49,13 @@ void servo_simple_init(void) {
 	TIM_TimeBaseInitTypeDef  TIM_TimeBaseStructure;
 	TIM_OCInitTypeDef  TIM_OCInitStructure;
 
-	palSetPadMode(HW_ICU_GPIO, HW_ICU_PIN, // SERVO: TIM4/CH1
+	palSetPadMode(HW_ICU_GPIO, HW_ICU_PIN,
 		PAL_MODE_ALTERNATE(HW_ICU_GPIO_AF) | PAL_STM32_OSPEED_HIGHEST | PAL_STM32_PUDR_FLOATING);
-	palSetPadMode(GPIOA, 5, // SERVO2: TIM2/CH1
-		PAL_MODE_ALTERNATE(GPIO_AF_TIM2) | PAL_STM32_OSPEED_HIGHEST | PAL_STM32_PUDR_FLOATING);
-	palSetPadMode(GPIOB, 10, // SERVO3: TIM2/CH3
-		PAL_MODE_ALTERNATE(GPIO_AF_TIM2) | PAL_STM32_OSPEED_HIGHEST | PAL_STM32_PUDR_FLOATING);
-	palSetPadMode(GPIOA, 6, // SERVO4: TIM13/CH1
-		PAL_MODE_ALTERNATE(GPIO_AF_TIM13) | PAL_STM32_OSPEED_HIGHEST | PAL_STM32_PUDR_FLOATING);
-	palSetPadMode(GPIOB, 11, // SERVO5: TIM2/CH4
+	palSetPadMode(GPIOA, 5, // SERVO2@PA5: TIM2/CH1
 		PAL_MODE_ALTERNATE(GPIO_AF_TIM2) | PAL_STM32_OSPEED_HIGHEST | PAL_STM32_PUDR_FLOATING);
 
 	HW_ICU_TIM_CLK_EN();
 	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2, ENABLE);
-	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM13, ENABLE);
 
 	TIM_TimeBaseStructure.TIM_Period = (uint16_t)((uint32_t)TIM_CLOCK / (uint32_t)SERVO_OUT_RATE_HZ);
 	TIM_TimeBaseStructure.TIM_Prescaler = (uint16_t)((168000000 / 2) / TIM_CLOCK) - 1;
@@ -72,7 +64,6 @@ void servo_simple_init(void) {
 
 	TIM_TimeBaseInit(HW_ICU_TIMER, &TIM_TimeBaseStructure);
 	TIM_TimeBaseInit(TIM2, &TIM_TimeBaseStructure);
-	TIM_TimeBaseInit(TIM13, &TIM_TimeBaseStructure);
 
 	TIM_OCInitStructure.TIM_OCMode = TIM_OCMode_PWM1;
 	TIM_OCInitStructure.TIM_OutputState = TIM_OutputState_Enable;
@@ -89,30 +80,19 @@ void servo_simple_init(void) {
 	TIM_OC1Init(TIM2, &TIM_OCInitStructure);
 	TIM_OC1PreloadConfig(TIM2, TIM_OCPreload_Enable);
 
-	TIM_OC3Init(TIM2, &TIM_OCInitStructure);
-	TIM_OC3PreloadConfig(TIM2, TIM_OCPreload_Enable);
-
-	TIM_OC1Init(TIM13, &TIM_OCInitStructure);
-	TIM_OC1PreloadConfig(TIM13, TIM_OCPreload_Enable);
-
-	TIM_OC4Init(TIM2, &TIM_OCInitStructure);
-	TIM_OC4PreloadConfig(TIM2, TIM_OCPreload_Enable);
- 
 	TIM_ARRPreloadConfig(HW_ICU_TIMER, ENABLE);
 	TIM_ARRPreloadConfig(TIM2, ENABLE);
-	TIM_ARRPreloadConfig(TIM13, ENABLE);
 
-	for (int i=0; i < N_SERVO; ++i)
-		servo_simple_set_output(i, 0.5);
+	servo_simple_set_output(0, 0.5);
+	servo_simple_set_output(1, 0.5);
 	
 	TIM_Cmd(HW_ICU_TIMER, ENABLE);
 	TIM_Cmd(TIM2, ENABLE);
-	TIM_Cmd(TIM13, ENABLE);
 
 	terminal_register_command_callback(
 		"servo",
 		"Set servo duty",
-		"[0-4] [0,1000]",
+		"{0|1} [0,1000]",
 		terminal_servo_write);
 }
 
@@ -124,7 +104,7 @@ void servo_simple_set_output(int idx, float out) {
 	us *= (float)TIM_CLOCK / 1000000.0;
 
 	switch (idx) {
-	case 0:
+	case 0: // the original servo output
 		if (HW_ICU_CHANNEL == ICU_CHANNEL_1) {
 			HW_ICU_TIMER->CCR1 = (uint32_t)us;
 		} else if (HW_ICU_CHANNEL == ICU_CHANNEL_2) {
@@ -133,9 +113,6 @@ void servo_simple_set_output(int idx, float out) {
 		break;
 
 	case 1: TIM2->CCR1 = (uint32_t)us; break;
-	case 2: TIM2->CCR3 = (uint32_t)us; break;
-	case 3: TIM13->CCR1 = (uint32_t)us; break;
-	case 4: TIM2->CCR4 = (uint32_t)us; break;
 	default: break;
 	}
 }
